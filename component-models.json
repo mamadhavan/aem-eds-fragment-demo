@@ -214,5 +214,16 @@
         "valueType": "string"
       }
     ]
+  },{
+    "id": "target-block",
+    "fields": [
+      {
+        "component": "text",
+        "valueType": "string",
+        "name": "decisionScope",
+        "label": "Target Decision Scope",
+        "description": "The Adobe Target decision scope name to resolve"
+      }
+    ]
   }
 ]

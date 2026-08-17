@@ -1,0 +1,8 @@
+.target-block {
+  min-height: 1px; /* avoids layout jump before the personalized block loads */
+}
+
+.target-block.target-block-loading {
+  min-height: 40px;
+  opacity: 0.6;
+}
