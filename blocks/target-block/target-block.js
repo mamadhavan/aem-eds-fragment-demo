@@ -141,7 +141,7 @@ async function fetchBlockFromPath(path) {
  * ------------------------------------------------------------------ */
 
 export default async function decorate(block) {
-  const decisionScope = block.dataset.scope || block.textContent.trim();
+  const decisionScope = block.dataset.decisionScope || block.textContent.trim();
 
   block.classList.add('target-block-loading');
 
