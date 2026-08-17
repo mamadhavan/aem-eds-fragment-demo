@@ -11,7 +11,7 @@
 
 // Adobe-hosted CDN build - swap for your own first-party-hosted copy if you
 // have one (recommended for ad-blocker resilience / better cache control).
-const ALLOY_SRC = 'https://cdn1.adoberesources.net/alloy/latest/alloy.min.js';
+const ALLOY_SRC = 'https://cdn1.adoberesources.net/alloy/2.19.1/alloy.min.js';
 
 const ALLOY_CONFIG = {
   datastreamId: '3f75f0f0-4f07-482b-930a-8ef876cf2853', // Edge configuration ID from AEP Datastreams
