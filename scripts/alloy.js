@@ -28,13 +28,19 @@ const ALLOY_CONFIG = {
  * decorates quickly) are queued and safely replayed once the real script
  * arrives, instead of throwing "alloy is not a function".
  */
-function injectAlloyStub() {
-  if (typeof window.alloy === 'function') return; // already present
+// NEW:
+function injectAlloyStub(namespace = 'alloy') {
+  if (typeof window[namespace] === 'function') return; // already present
 
-  window.alloy = (...args) => new Promise((resolve, reject) => {
-    (window.alloy.q = window.alloy.q || []).push([args, resolve, reject]);
+  window.__alloyNS = window.__alloyNS || [];
+  window.__alloyNS.push(namespace);
+
+  window[namespace] = (...args) => new Promise((resolve, reject) => {
+    window.setTimeout(() => {
+      window[namespace].q.push([resolve, reject, args]);
+    });
   });
-  window.alloy.q = [];
+  window[namespace].q = [];
 }
 
 /**
@@ -65,7 +71,17 @@ function loadAlloyLibrary() {
  *
  * @returns {Promise<void>}
  */
+// NEW:
 let configured = false;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`[alloy] ${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
 
 export default async function initAlloy() {
   injectAlloyStub();
@@ -73,11 +89,10 @@ export default async function initAlloy() {
   if (configured) return;
 
   try {
-    await loadAlloyLibrary();
-    await window.alloy('configure', ALLOY_CONFIG);
+    await withTimeout(loadAlloyLibrary(), 4000, 'loading alloy.js');
+    await withTimeout(window.alloy('configure', ALLOY_CONFIG), 4000, 'configuring alloy.js');
     configured = true;
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('[alloy] failed to initialize', e);
   }
 }
