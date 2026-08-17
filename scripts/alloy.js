@@ -67,7 +67,7 @@ function loadAlloyLibrary() {
  */
 let configured = false;
 
-export async function initAlloy() {
+export default async function initAlloy() {
   injectAlloyStub();
 
   if (configured) return;
