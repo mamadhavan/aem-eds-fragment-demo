@@ -14,7 +14,7 @@
 const ALLOY_SRC = 'https://cdn1.adoberesources.net/alloy/2.19.1/alloy.min.js';
 
 const ALLOY_CONFIG = {
-  datastreamId: '3f75f0f0-4f07-482b-930a-8ef876cf2853', // Edge configuration ID from AEP Datastreams
+  datastreamId: '424efc4b-ee51-42eb-9446-766399054eed', // Edge configuration ID from AEP Datastreams
   orgId: 'E71EADC8584130D00A495EBD@AdobeOrg', // e.g. 1234567890ABCDEF1234567@AdobeOrg
   debugEnabled: false, // flip to true while testing in dev/stage
   defaultConsent: 'in', // or 'pending' if gated behind a consent banner
