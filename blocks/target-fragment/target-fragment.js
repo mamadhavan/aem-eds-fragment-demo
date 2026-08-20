@@ -1,31 +1,92 @@
-import { getTargetContent, trackDisplay } from '../../scripts/target-service.js';
 import { loadFragment } from '../fragment/fragment.js';
 
+/* ------------------------------------------------------------------ *
+ * Config
+ * ------------------------------------------------------------------ */
+
+// How long to wait for alloy.js to become available before giving up.
+// Useful because alloy.js is usually loaded async/deferred and may not
+// be ready yet when this block's decorate() runs.
+const ALLOY_WAIT_TIMEOUT_MS = 3000;
+const ALLOY_WAIT_INTERVAL_MS = 50;
+
+/* ------------------------------------------------------------------ *
+ * Helpers
+ * ------------------------------------------------------------------ */
+
 /**
- * Strips an AEM/xwalk content-root prefix from a repository path.
- *
- * xwalk content-fragment pickers hand back full AEM repository paths like
- * /content/<site-name>/fragments/test-page - but the EDS delivery domain
- * (aem.page / aem.live / local aem up) strips the /content/<site-name>
- * segment, so the fetchable path is just /fragments/test-page. loadFragment
- * expects the latter, delivery-relative form. Paths that don't start with
- * /content/ are returned unchanged (e.g. Google Docs-authored paths, which
- * are already delivery-relative).
- *
- * @param {string} path
- * @returns {string}
+ * Polls for window.alloy to exist (alloy.js loads async, so it may not
+ * be ready yet when this block decorates).
+ * @returns {Promise<Function|null>} the alloy function, or null on timeout
  */
-function normalizeAemPath(path) {
-  const match = path.match(/^\/content\/[^/]+(\/.*)$/);
-  return match ? match[1] : path;
+function waitForAlloy() {
+  return new Promise((resolve) => {
+    if (typeof window.alloy === 'function') {
+      resolve(window.alloy);
+      return;
+    }
+
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (typeof window.alloy === 'function') {
+        clearInterval(interval);
+        resolve(window.alloy);
+      } else if (Date.now() - start > ALLOY_WAIT_TIMEOUT_MS) {
+        clearInterval(interval);
+        // eslint-disable-next-line no-console
+        console.warn('[target-fragment] timed out waiting for alloy.js');
+        resolve(null);
+      }
+    }, ALLOY_WAIT_INTERVAL_MS);
+  });
 }
 
 /**
- * Normalizes Target's decision content down to an EDS content path.
+ * Calls Adobe Target through the Alloy Web SDK (alloy.js) and returns the
+ * raw content of the first decision item for the given scope.
+ *
+ * @param {string} decisionScope
+ * @returns {Promise<*|null>} whatever content the Target offer contains
+ */
+async function getDecisionContent(decisionScope) {
+  const alloy = await waitForAlloy();
+  if (!alloy) return null;
+
+  try {
+    const result = await alloy('sendEvent', {
+      renderDecisions: true,
+      decisionScopes: [decisionScope],
+    });
+
+    const proposition = result?.propositions?.find(
+      (p) => p.scope === decisionScope,
+    );
+    const item = proposition?.items?.[0];
+    const rawContent = item?.data?.content;
+
+    if (rawContent == null) return null;
+
+    // Content can come back as an object or as a JSON string, depending on
+    // how the offer was authored in Target - normalize to an object.
+    if (typeof rawContent === 'string') {
+      try {
+        return JSON.parse(rawContent);
+      } catch {
+        // Not JSON - treat as a plain path/string
+        return rawContent;
+      }
+    }
+    return rawContent;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[target-fragment] error retrieving decision from Target', e);
+    return null;
+  }
+}
+
+/**
+ * Normalizes decision content down to an EDS content path.
  * Supports content shaped as { path: "/fragments/x" } or as a bare string.
- * This block only ever handles path-shaped content - if the offer for a
- * given scope returns flat marketing fields instead (headline, ctaLabel,
- * etc.), there's no path here and the block falls back to authored content.
  *
  * @param {*} content
  * @returns {string|null}
@@ -37,6 +98,24 @@ function resolvePath(content) {
     return content.path;
   }
   return null;
+}
+
+/**
+ * Strips an AEM/xwalk content-root prefix from a repository path.
+ *
+ * xwalk content-fragment pickers hand back full AEM repository paths like
+ * /content/<site-name>/fragments/test-page - but the EDS delivery domain
+ * (aem.page / aem.live / local aem up) strips the /content/<site-name>
+ * segment, so the fetchable path is just /fragments/test-page. loadFragment
+ * expects the latter, delivery-relative form. Paths that don't start with
+ * /content/ are returned unchanged (e.g. Google Docs-authored paths).
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+function normalizeAemPath(path) {
+  const match = path.match(/^\/content\/[^/]+(\/.*)$/);
+  return match ? match[1] : path;
 }
 
 /* ------------------------------------------------------------------ *
@@ -53,52 +132,33 @@ function resolvePath(content) {
  * the Google Docs table style puts the scope as plain text in the cell.
  *
  * Whatever is authored in the block is treated as fallback content - if
- * target-service returns nothing, the content isn't path-shaped, or the
- * fragment fetch fails, the block is left exactly as authored so it never
- * renders empty.
+ * Target returns no decision, or the fragment fetch fails, the block is
+ * left exactly as authored so it never renders empty.
+ *
+ * This block calls alloy.js directly (no target-service.js dependency) -
+ * see target-fragment-via-service.js for the variant that delegates the
+ * Target call to a shared target-service.js instead.
  * ------------------------------------------------------------------ */
 
 export default async function decorate(block) {
   const decisionScope = block.dataset.decisionScope || block.textContent.trim();
 
-  if (!decisionScope) return; // keep fallback content as authored
-
   block.classList.add('target-fragment-loading');
 
-  let result;
-  try {
-    result = await getTargetContent(decisionScope);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[target-fragment] error retrieving content from target-service', e);
-  }
-
-  block.classList.remove('target-fragment-loading');
-
-  if (!result) return; // keep fallback content as authored
-
-  const { content, proposition } = result;
+  const content = await getDecisionContent(decisionScope);
   const path = resolvePath(content);
 
-  if (!path) return; // keep fallback content as authored
+  if (!path) {
+    block.classList.remove('target-fragment-loading');
+    return; // keep fallback content as authored
+  }
 
   const normalizedPath = normalizeAemPath(path);
   const fragment = await loadFragment(normalizedPath);
 
+  block.classList.remove('target-fragment-loading');
+
   if (!fragment) return; // keep fallback content as authored
 
   block.replaceChildren(...fragment.childNodes);
-  block.classList.add('target-fragment-rendered');
-
-  // Tell Target this decision was actually shown, so activity reporting
-  // (views/impressions) reflects reality. Best-effort - a tracking
-  // failure shouldn't affect what the visitor sees.
-  if (proposition) {
-    try {
-      await trackDisplay(proposition);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[target-fragment] error tracking display', e);
-    }
-  }
 }
