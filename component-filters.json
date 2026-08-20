@@ -16,7 +16,8 @@
       "cards",
       "columns",
       "fragment",
-      "target-block"
+      "target-block",
+      "target-fragment"
     ]
   },
   {

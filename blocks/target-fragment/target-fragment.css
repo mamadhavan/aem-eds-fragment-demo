@@ -1,0 +1,8 @@
+.target-fragment {
+  min-height: 1px; /* avoids layout jump before the fragment loads */
+}
+
+.target-fragment.target-fragment-loading {
+  min-height: 40px;
+  opacity: 0.6;
+}

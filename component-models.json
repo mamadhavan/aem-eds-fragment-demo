@@ -225,5 +225,16 @@
         "description": "The Adobe Target decision scope name to resolve"
       }
     ]
-  }
+  },{
+  "id": "target-fragment",
+  "fields": [
+    {
+      "component": "text",
+      "valueType": "string",
+      "name": "decisionScope",
+      "label": "Target Decision Scope",
+      "description": "The Adobe Target decision scope name to resolve"
+    }
+  ]
+}
 ]
